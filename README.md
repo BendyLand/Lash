@@ -37,9 +37,9 @@ This executes the build section in a temporary shell script.
 ```just
 lash <section>
 ```
- - <section> is the label of the command block you want to run.
- - lashfile must be present in the current working directory.
- - Commands must be indented (with spaces or tabs) beneath a label ending in :.
+ - `section` is the label of the command block you want to run.
+ - `lashfile` must be present in the current working directory.
+ - Commands must be indented (with spaces or tabs) beneath a label ending in ':'.
 
 ## Notes
 
