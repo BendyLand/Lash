@@ -1,0 +1,2 @@
+first:
+	echo "This is a test of 'lash'"
