@@ -30,7 +30,7 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
         return;
     };
     defer file.close();
-    const contents = file.readToEndAlloc(allocator.*, 1024*1024) catch |err| {
+    const contents = file.readToEndAlloc(allocator.*, 1024*1024*10) catch |err| {
         std.debug.print("Unable to read file: {any}\n", .{err});
         return;
     };
@@ -64,10 +64,7 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
             // _ = try writer.write("\nCommands run successfully!\n");
         }
         else {
-            std.debug.print("\nUnable to run commands for '{s}'.\n", .{args[1]});
-            if (res.output.len > 0) {
-                std.debug.print("Error: {s}\n", .{res.output});
-            }
+            std.debug.print("\nUnable to run commands for '{s}':\nReason: '{any}'.\n", .{args[1], res.output});
         }
     }
     else {
@@ -191,11 +188,28 @@ pub fn runShellFile(path: []const u8) !CmdRes {
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
     try child.spawn();
-    var stdout_alloc = try std.ArrayListUnmanaged(u8).initCapacity(allocator, 0);
+    var stdout_alloc: std.ArrayListUnmanaged(u8) = blk: {
+        const result = std.ArrayListUnmanaged(u8).initCapacity(allocator, 0);
+        if (result) |list| break :blk list
+        else |err| {
+            std.debug.print("Unable to allocate memory for unmanaged ArrayList (1): {any}\n", .{err});
+            std.process.exit(1);
+        }
+    };
     defer stdout_alloc.deinit(allocator);
-    var stderr_alloc = try std.ArrayListUnmanaged(u8).initCapacity(allocator, 0);
+    var stderr_alloc: std.ArrayListUnmanaged(u8) = blk: {
+        const result = std.ArrayListUnmanaged(u8).initCapacity(allocator, 0);
+        if (result) |list| break :blk list
+        else |err| {
+            std.debug.print("Unable to allocate memory for unmanaged ArrayList (2): {any}\n", .{err});
+            std.process.exit(1);
+        }
+    };
     defer stderr_alloc.deinit(allocator);
-    try child.collectOutput(allocator, &stdout_alloc, &stderr_alloc, 1024);
+    child.collectOutput(allocator, &stdout_alloc, &stderr_alloc, (1024 * 1024 * 10)) catch |err| {
+        std.debug.print("Unable to collect child output: {any}\n", .{err});
+        std.process.exit(1);
+    };
     const status = try child.wait();
     var result: CmdRes = undefined;
     if (status.Exited == 0) {
