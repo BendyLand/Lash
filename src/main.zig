@@ -64,7 +64,7 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
             // _ = try writer.write("\nCommands run successfully!\n");
         }
         else {
-            std.debug.print("\nUnable to run commands for '{s}':\nReason: '{any}'.\n", .{args[1], res.output});
+            std.debug.print("\nThere was an error when executing a command in section '{s}':\nReason: '{s}'\nExit code: {d}\n", .{args[1], res.output, res.code});
         }
     }
     else {
