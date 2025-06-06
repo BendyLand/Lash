@@ -182,7 +182,7 @@ const CmdRes = struct {
 pub fn runShellFile(path: []const u8) !CmdRes {
     const allocator = std.heap.page_allocator;
     var child = std.process.Child.init(&[_][]const u8{
-        "/bin/sh", path,
+        "/bin/bash", path,
     }, allocator);
     child.stdin_behavior = .Inherit;
     child.stdout_behavior = .Pipe;
