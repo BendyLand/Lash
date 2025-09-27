@@ -65,7 +65,7 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
         }
         else {
             const output = if (res.output.len == 0) "[No reason given]" else res.output;
-            std.debug.print("Section '{s}' returned non-zero exit code ({d}).\nReason: '{s}'\n", .{args[1], res.code, output});
+            std.debug.print("Section '{s}' returned non-zero exit code ({d}).\nReason: '{s}'\n", .{args[1], res.code, std.mem.trim(u8, output, " \n\t")});
         }
     }
     else {
