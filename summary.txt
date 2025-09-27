@@ -1,3 +1,4 @@
+// main.zig
 const std = @import("std");
 const c = @cImport({
     @cInclude("sys/stat.h");
@@ -64,8 +65,7 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
             // _ = try writer.write("\nCommands run successfully!\n");
         }
         else {
-            const output = if (res.output.len == 0) "[No reason given]" else res.output;
-            std.debug.print("Section '{s}' returned non-zero exit code ({d}).\nReason: '{s}'\n", .{args[1], res.code, output});
+            std.debug.print("\nThere was an error when executing a command in section '{s}':\nReason: '{s}'\nExit code: {d}\n", .{args[1], res.output, res.code});
         }
     }
     else {
@@ -227,4 +227,3 @@ pub fn runShellFile(path: []const u8) !CmdRes {
     }
     return result;
 }
-
