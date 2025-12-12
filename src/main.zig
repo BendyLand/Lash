@@ -6,7 +6,7 @@ const c = @cImport({
 pub fn main() !void {
     var allocator = std.heap.page_allocator;
     // use other allocator to test for memory leaks:
-    
+
     // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     // var allocator = gpa.allocator();
     // defer {
@@ -14,7 +14,7 @@ pub fn main() !void {
     //         std.debug.print("No leaks detected!\n", .{});
     //     }
     // }
-    
+
     try runMain(&allocator);
 }
 
@@ -30,7 +30,7 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
         return;
     };
     defer file.close();
-    const contents = file.readToEndAlloc(allocator.*, 1024*1024*10) catch |err| {
+    const contents = file.readToEndAlloc(allocator.*, 1024 * 1024 * 10) catch |err| {
         std.debug.print("Unable to read file: {any}\n", .{err});
         return;
     };
@@ -52,21 +52,11 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
             std.debug.print("Unable to set executable file permissions.\n", .{});
             return;
         }
-        const res = try runShellFile("./.temp.sh");
+        _ = try runShellFile("./.temp.sh");
         defer temp.delete() catch |err| {
             std.debug.print("Warning: Failed to delete temp file: {any}\n", .{err});
         };
         allocator.free(shell_file);
-        if (res.code == 0) {
-            const writer = std.io.getStdOut().writer();
-            _ = try writer.write(res.output);
-            //TODO maybe add flag for verbose output?
-            // _ = try writer.write("\nCommands run successfully!\n");
-        }
-        else {
-            const output = if (res.output.len == 0) "[No reason given]" else res.output;
-            std.debug.print("Section '{s}' returned non-zero exit code ({d}).\nReason: '{s}'\n", .{args[1], res.code, std.mem.trim(u8, output, " \n\t")});
-        }
     }
     else {
         std.debug.print("Section '{s}' not found.\n", .{args[1]});
@@ -82,7 +72,7 @@ pub fn splitAtIndentedLines(allocator: *std.mem.Allocator, input: []const u8) ![
         const is_start = line.len > 0 and !std.ascii.isWhitespace(line[0]);
         const is_title = std.mem.containsAtLeastScalar(u8, line, 1, ':');
         if (is_start and is_title and index != 0) {
-            const segment = std.mem.trimRight(u8, input[current_start..line.ptr-input.ptr], "\n");
+            const segment = std.mem.trimRight(u8, input[current_start .. line.ptr - input.ptr], "\n");
             try parts.append(segment);
             current_start = line.ptr - input.ptr;
         }
@@ -104,7 +94,7 @@ pub fn parseEntries(
     for (segments) |segment| {
         var lines = std.mem.tokenizeScalar(u8, segment, '\n');
         const key_start = lines.next() orelse continue; // skip empty segments
-        const key_slice = key_start[0..key_start.len-1];
+        const key_slice = key_start[0 .. key_start.len - 1];
         const rest_start = segment[key_start.len..];
         const value_slice = std.mem.trimLeft(u8, rest_start, "\n\t ");
         const stripped = try stripCommonIndent(allocator, value_slice);
@@ -119,10 +109,7 @@ pub fn parseEntries(
 pub fn printMap(map: *std.StringHashMap([]const u8)) void {
     var it = map.*.iterator();
     while (it.next()) |entry| {
-        std.debug.print(
-            "Key:\n{s}\n\nValue:\n{s}\n\n~~~~~~~~~~~~~~~~~~\n\n",
-            .{entry.key_ptr.*, entry.value_ptr.* }
-        );
+        std.debug.print("Key:\n{s}\n\nValue:\n{s}\n\n~~~~~~~~~~~~~~~~~~\n\n", .{ entry.key_ptr.*, entry.value_ptr.* });
     }
 }
 
@@ -148,7 +135,7 @@ fn stripCommonIndent(allocator: *std.mem.Allocator, text: []const u8) ![]const u
 
 pub fn constructShellFile(allocator: *std.mem.Allocator, text: []const u8) ![]const u8 {
     const header = "#!/bin/bash\n\n";
-    const parts: [2][]const u8 = .{header, text};
+    const parts: [2][]const u8 = .{ header, text };
     return try std.mem.join(allocator.*, "", &parts);
 }
 
@@ -157,7 +144,7 @@ const TempFile = struct {
     path: []const u8,
     /// Creates a new temporary file with the given contents.
     pub fn create(allocator: *std.mem.Allocator, contents: []const u8) !TempFile {
-        const tmp_dir = std.fs.cwd(); 
+        const tmp_dir = std.fs.cwd();
         const path = try std.fmt.allocPrint(allocator.*, ".temp.sh", .{});
         var file = try tmp_dir.createFile(path, .{ .truncate = true });
         defer file.close();
@@ -169,62 +156,22 @@ const TempFile = struct {
     }
     /// Deletes the temporary file and frees the path.
     pub fn delete(self: *TempFile) !void {
-        const tmp_dir = std.fs.cwd(); 
+        const tmp_dir = std.fs.cwd();
         try tmp_dir.deleteFile(self.path);
         self.allocator.free(self.path);
     }
 };
 
-const CmdRes = struct {
-    code: u8,
-    output: []const u8,
-};
-
-pub fn runShellFile(path: []const u8) !CmdRes {
+pub fn runShellFile(path: []const u8) !u8 {
     const allocator = std.heap.page_allocator;
     var child = std.process.Child.init(&[_][]const u8{
         "/bin/bash", path,
     }, allocator);
     child.stdin_behavior = .Inherit;
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
+    child.stdout_behavior = .Inherit;
+    child.stderr_behavior = .Inherit;
     try child.spawn();
-    var stdout_alloc: std.ArrayListUnmanaged(u8) = blk: {
-        const result = std.ArrayListUnmanaged(u8).initCapacity(allocator, 0);
-        if (result) |list| break :blk list
-        else |err| {
-            std.debug.print("Unable to allocate memory for unmanaged ArrayList (1): {any}\n", .{err});
-            std.process.exit(1);
-        }
-    };
-    defer stdout_alloc.deinit(allocator);
-    var stderr_alloc: std.ArrayListUnmanaged(u8) = blk: {
-        const result = std.ArrayListUnmanaged(u8).initCapacity(allocator, 0);
-        if (result) |list| break :blk list
-        else |err| {
-            std.debug.print("Unable to allocate memory for unmanaged ArrayList (2): {any}\n", .{err});
-            std.process.exit(1);
-        }
-    };
-    defer stderr_alloc.deinit(allocator);
-    child.collectOutput(allocator, &stdout_alloc, &stderr_alloc, (1024 * 1024 * 10)) catch |err| {
-        std.debug.print("Unable to collect child output: {any}\n", .{err});
-        std.process.exit(1);
-    };
     const status = try child.wait();
-    var result: CmdRes = undefined;
-    if (status.Exited == 0) {
-        result = CmdRes{
-            .code = status.Exited,
-            .output = try stdout_alloc.toOwnedSlice(allocator),
-        };
-    }
-    else {
-        result = CmdRes{
-            .code = status.Exited,
-            .output = try stderr_alloc.toOwnedSlice(allocator),
-        };
-    }
-    return result;
+    return status.Exited;
 }
 
