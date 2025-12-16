@@ -206,8 +206,8 @@ pub fn printHelp() void {
 pub fn printCompletionScript() !void {
     const writer = std.io.getStdOut().writer();
     const text =
-        \\Place this script inside a file named 'lash'
-        \\It should be located alongside your other bash completion scripts.
+        \\# Place this script inside a file named 'lash'.
+        \\# It should be located alongside your other bash completion scripts.
         \\
         \\# Completions for labeled bash
         \\_lash()
