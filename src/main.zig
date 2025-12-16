@@ -22,7 +22,7 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
     const args = try std.process.argsAlloc(allocator.*);
     defer std.process.argsFree(allocator.*, args);
     if (args.len < 2) {
-        std.debug.print("Usage: lash <section>\n", .{});
+        printHelp();
         return;
     }
     const file = std.fs.cwd().openFile("lashfile", .{}) catch |err| {
@@ -39,6 +39,22 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
     defer allocator.free(sections);
     var entries = try parseEntries(allocator, sections);
     defer freeMap(allocator, &entries);
+    if (std.mem.eql(u8, args[1], "sections")) {
+        const writer = std.io.getStdOut().writer();
+        var it = entries.iterator();
+        while (it.next()) |entry| {
+            try writer.print("{s}\n", .{entry.key_ptr.*});
+        }
+        return;
+    }
+    else if (std.mem.eql(u8, args[1], "help")) {
+        printHelp();
+        return;
+    }
+    else if (std.mem.eql(u8, args[1], "completions")) {
+        try printCompletionScript();
+        return;
+    }
     const command = entries.get(args[1]);
     if (command) |cmd| {
         const shell_file = constructShellFile(allocator, cmd) catch |err| {
@@ -173,5 +189,41 @@ pub fn runShellFile(path: []const u8) !u8 {
     try child.spawn();
     const status = try child.wait();
     return status.Exited;
+}
+
+pub fn printHelp() void {
+    const helpMsg =
+        \\Usage: lash <section>|<command>
+        \\Available commands:
+        \\ sections    : print the sections from your lashfile
+        \\ completions : prints the shell script to enable
+        \\                 tab completions for your lash sections.
+        \\
+    ;
+    std.debug.print("{s}\n", .{helpMsg});
+}
+
+pub fn printCompletionScript() !void {
+    const writer = std.io.getStdOut().writer();
+    const text =
+        \\Place this script inside a file named 'lash'
+        \\It should be located alongside your other bash completion scripts.
+        \\
+        \\# Completions for labeled bash
+        \\_lash()
+        \\{
+        \\  # Only complete the first argument (the section name)
+        \\  if [ "${#COMP_WORDS[@]}" != "2" ]; then
+        \\    return
+        \\  fi
+        \\  
+        \\  local available_commands=$(lash sections 2>/dev/null)
+        \\  
+        \\  COMPREPLY=($(compgen -W "${available_commands}" -- "${COMP_WORDS[1]}"))
+        \\} &&
+        \\    complete -F _lash lash
+        \\
+        ;
+    _ = try writer.write(text);
 }
 
