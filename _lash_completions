@@ -1,0 +1,24 @@
+# Completions for labeled bash
+# 
+# This file should be placed alongside the other shell completions.
+# These are often found in places like:
+# /usr/share/bash-completion/completions
+# ~/.bash_completions
+# ~/.bashrc
+# etc.
+
+_lash()
+{
+  # COMP_WORDS[0] is 'lash'
+  # COMP_CWORD is the index of the word being typed
+  
+  # Only complete the first argument (the section name)
+  if [ "${#COMP_WORDS[@]}" != "2" ]; then
+    return
+  fi
+  local available_commands=$(lash sections 2>/dev/null)
+  COMPREPLY=($(compgen -W "${available_commands}" -- "${COMP_WORDS[1]}"))
+} &&
+    complete -F _lash lash
+
+
