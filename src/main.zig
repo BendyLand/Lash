@@ -4,9 +4,17 @@ const c = @cImport({
 });
 
 pub fn main() !void {
+    // Register SIGINT (Ctrl+C) and SIGTERM
+    const act = std.posix.Sigaction{
+        .handler = .{ .handler = signalHandler },
+        .mask = std.posix.empty_sigset,
+        .flags = 0,
+    };
+    std.posix.sigaction(std.posix.SIG.INT, &act, null);
+    std.posix.sigaction(std.posix.SIG.TERM, &act, null);
     var allocator = std.heap.page_allocator;
     // use other allocator to test for memory leaks:
-
+    // 
     // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     // var allocator = gpa.allocator();
     // defer {
@@ -14,9 +22,20 @@ pub fn main() !void {
     //         std.debug.print("No leaks detected!\n", .{});
     //     }
     // }
-
     try runMain(&allocator);
 }
+
+var global_temp_path: ?[:0]const u8 = null;
+
+fn signalHandler(sig: i32) callconv(.C) void {
+    if (global_temp_path) |path| {
+        // unlink is async-signal-safe.
+        _ = std.posix.system.unlink(path.ptr);
+    }
+    // 128 + signal is the standard exit code convention for signals
+    std.process.exit(@intCast(128 + sig));
+}
+
 
 pub fn runMain(allocator: *std.mem.Allocator) !void {
     const args = try std.process.argsAlloc(allocator.*);
@@ -62,16 +81,20 @@ pub fn runMain(allocator: *std.mem.Allocator) !void {
             return;
         };
         var temp = try TempFile.create(allocator, shell_file);
+        global_temp_path = temp.path;
+        defer {
+            temp.delete() catch |err| {
+                std.debug.print("Warning: Failed to delete temp file: {any}\n", .{err});
+            };
+            global_temp_path = null;
+        }
         const mode = 0o755; // rwxr-xr-x
         const mod_res = c.chmod(temp.path.ptr, mode);
         if (mod_res != 0) {
             std.debug.print("Unable to set executable file permissions.\n", .{});
             return;
         }
-        _ = try runShellFile("./.temp.sh");
-        defer temp.delete() catch |err| {
-            std.debug.print("Warning: Failed to delete temp file: {any}\n", .{err});
-        };
+        _ = try runShellFile(temp.path);
         allocator.free(shell_file);
     }
     else {
@@ -157,11 +180,12 @@ pub fn constructShellFile(allocator: *std.mem.Allocator, text: []const u8) ![]co
 
 const TempFile = struct {
     allocator: *std.mem.Allocator,
-    path: []const u8,
+    path: [:0]const u8,
     /// Creates a new temporary file with the given contents.
     pub fn create(allocator: *std.mem.Allocator, contents: []const u8) !TempFile {
         const tmp_dir = std.fs.cwd();
-        const path = try std.fmt.allocPrint(allocator.*, ".temp.sh", .{});
+        const rand_num = std.crypto.random.int(u16);
+        const path = try std.fmt.allocPrintZ(allocator.*, ".{d}.sh", .{rand_num});
         var file = try tmp_dir.createFile(path, .{ .truncate = true });
         defer file.close();
         try file.writer().writeAll(contents);
@@ -170,6 +194,7 @@ const TempFile = struct {
             .path = path,
         };
     }
+    
     /// Deletes the temporary file and frees the path.
     pub fn delete(self: *TempFile) !void {
         const tmp_dir = std.fs.cwd();
@@ -213,15 +238,15 @@ pub fn printCompletionScript() !void {
         \\_lash()
         \\{
         \\  # Only complete the first argument (the section name)
-        \\  if [ "${#COMP_WORDS[@]}" != "2" ]; then
+        \\  if [ "${COMP_CWORD}" != "1" ]; then
         \\    return
         \\  fi
-        \\  
-        \\  local available_commands=$(lash sections 2>/dev/null)
-        \\  
-        \\  COMPREPLY=($(compgen -W "${available_commands}" -- "${COMP_WORDS[1]}"))
+        \\  local dynamic_sections=$(lash sections 2>/dev/null)
+        \\  # hardcoded commands
+        \\  local static_commands="sections completions"
+        \\  COMPREPLY=($(compgen -W "${dynamic_sections} ${static_commands}" -- "${COMP_WORDS[1]}"))
         \\} &&
-        \\    complete -F _lash lash
+        \\  complete -F _lash lash
         \\
         ;
     _ = try writer.write(text);
