@@ -16,8 +16,6 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
-    exe.linkSystemLibrary("c");
-
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
