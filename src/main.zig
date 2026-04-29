@@ -72,6 +72,10 @@ pub fn runMain(allocator: std.mem.Allocator, init: std.process.Init) !void {
         try printCompletionScript(init);
         return;
     }
+    else if (std.mem.eql(u8, args[1], "print")) {
+        try printSection(init, args, entries);
+        return;
+    }
     const command = entries.get(args[1]);
     if (command) |cmd| {
         const shell_file = constructShellFile(allocator, cmd) catch |err| {
@@ -112,7 +116,7 @@ pub fn splitAtIndentedLines(allocator: std.mem.Allocator, input: []const u8) ![]
         }
         index += 1;
     }
-    // Add the final segment
+    // add the final segment
     if (current_start < input.len) {
         const final_segment = std.mem.trimEnd(u8, input[current_start..], "\n");
         try parts.append(allocator, final_segment);
@@ -174,7 +178,6 @@ pub fn constructShellFile(allocator: std.mem.Allocator, text: []const u8) ![]con
 }
 
 const TempFile = struct {
-    // 1. Allocator is passed by value now, not pointer
     allocator: std.mem.Allocator,
     path: [:0]const u8,
 
@@ -215,9 +218,11 @@ pub fn printHelp() void {
     const helpMsg =
         \\Usage: lash <section>|<command>
         \\Available commands:
-        \\ sections    : print the sections from your lashfile
-        \\ completions : prints the shell script to enable
-        \\                 tab completions for your lash sections.
+        \\ sections        : print the sections from your lashfile
+        \\ completions     : prints the shell script to enable
+        \\                    tab completions for your lash sections.
+        \\ print <section> : prints the bash code from the specified
+        \\                    section; does not execute anything.
         \\
     ;
     std.debug.print("{s}\n", .{helpMsg});
@@ -231,17 +236,18 @@ pub fn printCompletionScript(init: std.process.Init) !void {
         \\# Completions for labeled bash
         \\_lash()
         \\{
-        \\  # Only complete the first argument (the section name)
+        \\  local dynamic_sections=$(lash sections 2>/dev/null)
+        \\  if [ "${COMP_CWORD}" == "2" ] && [ "${COMP_WORDS[1]}" == "print" ]; then
+        \\    COMPREPLY=($(compgen -W "${dynamic_sections}" -- "${COMP_WORDS[2]}"))
+        \\    return
+        \\  fi
         \\  if [ "${COMP_CWORD}" != "1" ]; then
         \\    return
         \\  fi
-        \\  local dynamic_sections=$(lash sections 2>/dev/null)
-        \\  # hardcoded commands
-        \\  local static_commands="sections completions"
+        \\  local static_commands="sections completions print"
         \\  COMPREPLY=($(compgen -W "${dynamic_sections} ${static_commands}" -- "${COMP_WORDS[1]}"))
         \\} &&
         \\  complete -F _lash lash
-        \\
     ;
     try println(init, text);
 }
@@ -251,6 +257,17 @@ pub fn println(init: std.process.Init, text: []const u8) !void {
     var writer = std.Io.File.stdout().writer(init.io, &buf);
     const stdout = &writer.interface;
     try stdout.print("{s}\n", .{text});
+    try stdout.flush();
 }
 
+pub fn printSection(init: std.process.Init, args: []const [:0]const u8, entries: std.StringHashMap([]const u8)) !void {
+    var it = entries.iterator();
+    while (it.next()) |entry| {
+        if (std.mem.eql(u8, args[2], entry.key_ptr.*)) {
+            try println(init, entry.value_ptr.*);
+            return;
+        }
+    }
+    std.debug.print("Section '{s}' not found.\n", .{args[2]});
+}
 
