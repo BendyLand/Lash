@@ -43,6 +43,14 @@ pub fn runMain(allocator: std.mem.Allocator, init: std.process.Init) !void {
         printHelp();
         return;
     }
+    else if (std.mem.eql(u8, args[1], "help")) {
+        printHelp();
+        return;
+    }
+    else if (std.mem.eql(u8, args[1], "completions")) {
+        try printCompletionScript(init);
+        return;
+    }
     const file = std.Io.Dir.cwd().openFile(init.io, "lashfile", .{}) catch |err| {
         std.debug.print("Unable to open file: {any}\n", .{err});
         return;
@@ -62,14 +70,6 @@ pub fn runMain(allocator: std.mem.Allocator, init: std.process.Init) !void {
         while (it.next()) |entry| {
             try println(init, entry.key_ptr.*);
         }
-        return;
-    }
-    else if (std.mem.eql(u8, args[1], "help")) {
-        printHelp();
-        return;
-    }
-    else if (std.mem.eql(u8, args[1], "completions")) {
-        try printCompletionScript(init);
         return;
     }
     else if (std.mem.eql(u8, args[1], "print")) {
